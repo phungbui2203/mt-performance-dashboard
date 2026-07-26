@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MT Performance — CEO Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=4" />
+</head>
+<body>
+  <header class="page-header">
+    <div class="header-row">
+      <div class="header-brand">
+        <img src="assets/thaicorp-logo.png" alt="ThaiCorp" class="brand-logo" />
+        <div class="header-text">
+          <h1 data-i18n="dashboardTitle">MT Performance Dashboard</h1>
+          <p class="subtitle" id="meta-subtitle" data-i18n="loading">Đang tải dữ liệu…</p>
+        </div>
+      </div>
+      <div class="lang-switch" id="lang-switch" role="group" data-i18n-aria="langGroup">
+        <button type="button" class="lang-btn is-active" data-lang="vi" aria-pressed="true">VI</button>
+        <button type="button" class="lang-btn" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+    </div>
+    <div class="filters" role="group" data-i18n-aria="filterGroup">
+      <label class="filter-field">
+        <span data-i18n="year">Năm</span>
+        <select id="filter-year">
+          <option value="2025">2025</option>
+          <option value="2026">2026</option>
+        </select>
+      </label>
+      <label class="filter-field">
+        <span data-i18n="month">Tháng</span>
+        <select id="filter-month">
+          <option value="01">January</option>
+          <option value="02">February</option>
+          <option value="03">March</option>
+          <option value="04">April</option>
+          <option value="05">May</option>
+          <option value="06">June</option>
+          <option value="07">July</option>
+          <option value="08">August</option>
+          <option value="09">September</option>
+          <option value="10">October</option>
+          <option value="11">November</option>
+          <option value="12">December</option>
+        </select>
+      </label>
+      <label class="filter-field">
+        <span data-i18n="staff">Staff</span>
+        <select id="filter-staff">
+          <option value="all">Tất cả Staff</option>
+        </select>
+      </label>
+      <label class="filter-field">
+        <span data-i18n="customer">Customer</span>
+        <select id="filter-customer">
+          <option value="all">Tất cả Customer</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <main>
+    <section class="section" aria-labelledby="kpi-heading">
+      <h2 id="kpi-heading" class="section-title" data-i18n="executiveSummary">Executive Summary</h2>
+      <div class="kpi-grid kpi-grid-4" id="kpi-grid">
+        <article class="kpi-card kpi-card-accent">
+          <p class="kpi-label" data-i18n="performance">Performance</p>
+          <p class="kpi-value" id="kpi-actual">—</p>
+          <p class="kpi-sub" data-i18n="unitVnd">đơn vị VND</p>
+        </article>
+        <article class="kpi-card">
+          <p class="kpi-label" data-i18n="target">Target</p>
+          <p class="kpi-value" id="kpi-target">—</p>
+          <p class="kpi-sub" data-i18n="unitVnd">đơn vị VND</p>
+        </article>
+        <article class="kpi-card">
+          <p class="kpi-label" data-i18n="pctAchievement">% Đạt Target</p>
+          <p class="kpi-value" id="kpi-achievement">—</p>
+          <p class="kpi-sub" data-i18n="perfOverTarget">Performance/Target</p>
+        </article>
+        <article class="kpi-card">
+          <p class="kpi-label" data-i18n="pctVsLy">% So với năm trước</p>
+          <p class="kpi-value" id="kpi-yoy">—</p>
+          <p class="kpi-sub" id="kpi-yoy-sub" data-i18n="yoyDefault">YoY growth</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="category-heading">
+      <h2 id="category-heading" class="section-title" data-i18n="categorySection">Tracking Performance by Category</h2>
+      <div class="chart-card chart-category">
+        <canvas id="chart-category"></canvas>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="account-heading">
+      <h2 id="account-heading" class="section-title" data-i18n="accountSection">Tracking Performance by Account</h2>
+      <div class="chart-grid chart-grid-2">
+        <div class="chart-card chart-tall">
+          <h3 data-i18n="rankingPerformance">Ranking Performance</h3>
+          <canvas id="chart-account-bar"></canvas>
+        </div>
+        <div class="chart-card chart-tall">
+          <h3 data-i18n="performanceShare">Performance (%)</h3>
+          <canvas id="chart-account-pie"></canvas>
+        </div>
+      </div>
+      <div class="table-card">
+        <h3 data-i18n="detailTable">Bảng chi tiết</h3>
+        <div class="table-wrap">
+          <table id="account-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th data-i18n="colCustomer">Customer</th>
+                <th data-i18n="colTarget">Target</th>
+                <th data-i18n="colPerformance">Performance</th>
+                <th data-i18n="colPctAch">% Đạt</th>
+                <th data-i18n="colShare">Tỷ trọng</th>
+                <th data-i18n="colLy">LY</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="loading-card">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <p id="loading-message">Đang tải dữ liệu…</p>
+    </div>
+  </div>
+
+  <script src="data/metrics.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <script src="i18n.js?v=3"></script>
+  <script src="app.js?v=12"></script>
+</body>
+</html>
