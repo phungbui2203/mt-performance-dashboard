@@ -65,15 +65,17 @@ function unitDiv() {
 
 function fmtMoney(n) {
   if (n == null || Number.isNaN(n)) return "—";
-  const bil = n / 1_000_000_000;
-  const mil = n / unitDiv();
-  if (Math.abs(bil) >= 1) {
-    return `${bil.toFixed(2)} ${t("unitBil")}`;
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000_000) {
+    return `${(n / 1_000_000_000).toFixed(2)}${t("unitBil")}`;
   }
-  return `${new Intl.NumberFormat("vi-VN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(mil)} ${t("unitMil")}`;
+  if (abs >= 1_000_000) {
+    return `${(n / 1_000_000).toFixed(2)}${t("unitMil")}`;
+  }
+  if (abs >= 1_000) {
+    return `${(n / 1_000).toFixed(2)}${t("unitThou")}`;
+  }
+  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(n);
 }
 
 /** @deprecated use fmtMoney */
