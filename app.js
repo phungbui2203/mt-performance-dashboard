@@ -196,10 +196,10 @@ function aggregateSlices(monthIds, staff, customer) {
     .filter((a) => a.target > 0 || a.actual > 0)
     .sort((a, b) => b.actual - a.actual);
 
-  const shareBase = kpis.target || 0;
+  const total = accounts.reduce((sum, a) => sum + a.actual, 0);
   accounts.forEach((a, i) => {
     a.rank = i + 1;
-    a.share = shareBase ? a.actual / shareBase : 0;
+    a.share = total ? a.actual / total : 0;
   });
 
   return { kpis, categories, accounts };
