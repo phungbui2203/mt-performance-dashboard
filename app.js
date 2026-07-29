@@ -216,6 +216,155 @@ function aggregateSlices(monthIds, staff, customer) {
   return { kpis, categories, accounts };
 }
 
+function mergeBundles(monthIds) {
+  const merged = {
+    step1_total: 0,
+    provinces: new Set(),
+    province_region: {},
+    staff_rows: [],
+    account_rows: [],
+    province_actuals: [],
+    category_rows: [],
+  };
+  for (const mid of monthIds) {
+    const b = data.bundles?.[mid];
+    if (!b) continue;
+    merged.step1_total += b.step1_total || 0;
+    (b.provinces || []).forEach((p) => merged.provinces.add(p));
+    Object.assign(merged.province_region, b.province_region || {});
+    merged.staff_rows.push(...(b.staff_rows || []));
+    merged.account_rows.push(...(b.account_rows || []));
+    merged.province_actuals.push(...(b.province_actuals || []));
+    merged.category_rows.push(...(b.category_rows || []));
+  }
+  merged.provinces = [...merged.provinces].sort((a, b) => a.localeCompare(b, "vi"));
+  return merged;
+}
+
+function aggregateBundles(monthIds, staff, customer, region, province) {
+  const bundle = mergeBundles(monthIds);
+  if (!bundle.staff_rows.length && !bundle.account_rows.length) return null;
+
+  let staffRows = bundle.staff_rows;
+  let accountRows = bundle.account_rows;
+  if (staff !== "all") staffRows = staffRows.filter((r) => r.staff === staff);
+  if (customer !== "all") {
+    staffRows = staffRows.filter((r) => r.account === customer);
+    accountRows = accountRows.filter((r) => r.account === customer);
+  }
+  if (region !== "all") {
+    staffRows = staffRows.filter((r) => r.region === region);
+    accountRows = accountRows.filter((r) => r.region === region);
+  }
+
+  const accountActualMap = {};
+  const useProvinceActual = province !== "all";
+
+  if (useProvinceActual) {
+    let pa = bundle.province_actuals.filter((r) => r.province === province);
+    if (region !== "all") pa = pa.filter((r) => r.region === region);
+    if (customer !== "all") pa = pa.filter((r) => r.account === customer);
+    for (const r of pa) {
+      accountActualMap[r.account] = (accountActualMap[r.account] || 0) + r.actual;
+    }
+  } else if (staff !== "all") {
+    const groups = {};
+    for (const row of staffRows) {
+      const k = `${row.customer}|${row.region}`;
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(row);
+    }
+    for (const rows of Object.values(groups)) {
+      const base = accountRows.find(
+        (a) => a.customer === rows[0].customer && a.region === rows[0].region,
+      );
+      const baseActual = base?.actual || 0;
+      const totalTarget = rows.reduce((s, r) => s + r.target, 0);
+      for (const row of rows) {
+        const weight = totalTarget ? row.target / totalTarget : 1 / rows.length;
+        accountActualMap[row.account] = (accountActualMap[row.account] || 0) + baseActual * weight;
+      }
+    }
+  } else {
+    for (const r of accountRows) {
+      accountActualMap[r.account] = (accountActualMap[r.account] || 0) + (r.actual || 0);
+    }
+  }
+
+  const accountMap = {};
+  for (const row of staffRows.length ? staffRows : accountRows) {
+    const name = row.account;
+    if (!accountMap[name]) {
+      accountMap[name] = {
+        account: name,
+        target: 0,
+        actual: accountActualMap[name] || 0,
+      };
+    }
+    accountMap[name].target += row.target || 0;
+  }
+  for (const [name, actual] of Object.entries(accountActualMap)) {
+    if (!accountMap[name]) {
+      accountMap[name] = { account: name, target: 0, actual };
+    } else {
+      accountMap[name].actual = actual;
+    }
+  }
+
+  const accounts = Object.values(accountMap)
+    .filter((a) => a.target > 0 || a.actual > 0)
+    .map((a) => ({
+      ...a,
+      achievement: a.target ? a.actual / a.target : 0,
+    }))
+    .sort((a, b) => b.actual - a.actual);
+
+  const total = accounts.reduce((s, a) => s + a.actual, 0);
+  accounts.forEach((a, i) => {
+    a.rank = i + 1;
+    a.share = total ? a.actual / total : 0;
+  });
+
+  let catRows = bundle.category_rows;
+  if (region !== "all") catRows = catRows.filter((r) => r.region === region);
+  if (province !== "all") {
+    catRows = catRows.filter((r) => r.province === province || r.province === "__all__");
+  }
+  const catMap = {};
+  for (const row of catRows) {
+    if (!catMap[row.category]) {
+      catMap[row.category] = { category: row.category, target: 0, actual: 0 };
+    }
+    catMap[row.category].target += row.target || 0;
+    if (row.province !== "__all__") {
+      catMap[row.category].actual += row.actual || 0;
+    }
+  }
+  const categories = Object.values(catMap)
+    .map((c) => ({
+      ...c,
+      achievement: c.target ? c.actual / c.target : 0,
+    }))
+    .filter((c) => c.target > 0 || c.actual > 0)
+    .sort((a, b) => b.actual - a.actual);
+
+  const totalTarget = accounts.reduce((s, a) => s + a.target, 0);
+  const totalActual =
+    staff === "all" && customer === "all" && region === "all" && province === "all"
+      ? bundle.step1_total
+      : accounts.reduce((s, a) => s + a.actual, 0);
+
+  return {
+    kpis: {
+      target: totalTarget,
+      actual: totalActual,
+      achievement: totalTarget ? totalActual / totalTarget : 0,
+    },
+    categories,
+    accounts,
+  };
+}
+
 function getSelectedMonthId() {
   const year = document.getElementById("filter-year").value;
   const month = document.getElementById("filter-month").value;
@@ -268,56 +417,74 @@ function sliceKey(month, staff, customer) {
   return `${month}|${staff}|${customer}`;
 }
 
-function getSliceRaw(year, monthValue, staff, customer) {
+function getSliceRaw(year, monthValue, staff, customer, region, province) {
+  const monthIds = monthValue === "all" ? getMonthIdsForYear(year) : [`${year}-${monthValue}`];
+  if (data.bundles && monthIds.some((id) => data.bundles[id])) {
+    return aggregateBundles(monthIds, staff, customer, region, province);
+  }
   if (monthValue === "all") {
-    return aggregateSlices(getMonthIdsForYear(year), staff, customer);
+    return aggregateSlices(monthIds, staff, customer);
   }
   const monthId = `${year}-${monthValue}`;
   return data.slices[sliceKey(monthId, staff, customer)] || data.slices[sliceKey(monthId, "all", "all")];
 }
 
-function getPriorPeriodIds(year, monthValue) {
+function getPriorMonthIds(year, monthValue) {
   const y = parseInt(year, 10);
   if (monthValue === "all") {
-    return getMonthIdsForYear(year)
-      .map((id) => {
-        const { monthNum } = parseMonthId(id);
-        return `${y - 1}-${String(monthNum).padStart(2, "0")}`;
-      })
-      .filter((id) => data.meta.months.some((m) => m.id === id));
+    return [];
   }
-  const priorId = `${y - 1}-${monthValue}`;
-  return data.meta.months.some((m) => m.id === priorId) ? [priorId] : [];
+  const m = parseInt(monthValue, 10);
+  const prevMonth = m === 1 ? 12 : m - 1;
+  const prevYear = m === 1 ? y - 1 : y;
+  const priorId = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
+  return data.meta.months.some((mo) => mo.id === priorId) ? [priorId] : [];
 }
 
-function getLyPeriodLabel(year, monthValue) {
+function getPriorPeriodLabel(year, monthValue) {
   const y = parseInt(year, 10);
-  if (monthValue === "all") return t("allMonthsPrior", { year: y - 1 });
-  const month = monthNameFromNum(parseInt(monthValue, 10));
-  return t("monthPrior", { month, year: y - 1 });
+  if (monthValue === "all") return "";
+  const m = parseInt(monthValue, 10);
+  const prevMonth = m === 1 ? 12 : m - 1;
+  const prevYear = m === 1 ? y - 1 : y;
+  const month = monthNameFromNum(prevMonth);
+  return t("monthPrior", { month, year: prevYear });
 }
 
-function enrichSliceWithYoy(slice, year, monthValue, staff, customer) {
+/** @deprecated use getPriorMonthIds */
+function getPriorPeriodIds(year, monthValue) {
+  return getPriorMonthIds(year, monthValue);
+}
+
+function enrichSliceWithYoy(slice, year, monthValue, staff, customer, region, province) {
   if (!slice) return null;
 
-  const priorIds = getPriorPeriodIds(year, monthValue);
+  const priorIds = getPriorMonthIds(year, monthValue);
   const priorSlice = priorIds.length
-    ? aggregateSlices(priorIds, staff, customer)
+    ? aggregateBundles(priorIds, staff, customer, region, province)
+      || aggregateSlices(priorIds, staff, customer)
     : null;
   const priorActual = priorSlice?.kpis?.actual ?? 0;
   const priorByAccount = Object.fromEntries(
     (priorSlice?.accounts || []).map((a) => [a.account, a.actual]),
   );
+  const priorByCategory = Object.fromEntries(
+    (priorSlice?.categories || []).map((c) => [c.category, c.actual]),
+  );
 
   return {
     ...slice,
-    ly_label: getLyPeriodLabel(year, monthValue),
+    ly_label: getPriorPeriodLabel(year, monthValue),
     ly_available: priorActual > 0,
     kpis: {
       ...slice.kpis,
       ly_actual: priorActual,
       yoy: yoyGrowth(slice.kpis.actual, priorActual),
     },
+    categories: slice.categories.map((c) => {
+      const pa = priorByCategory[c.category] ?? 0;
+      return { ...c, ly_actual: pa, yoy: yoyGrowth(c.actual, pa) };
+    }),
     accounts: slice.accounts.map((a) => {
       const pa = priorByAccount[a.account] ?? 0;
       return { ...a, ly_actual: pa, yoy: yoyGrowth(a.actual, pa) };
@@ -328,10 +495,12 @@ function enrichSliceWithYoy(slice, year, monthValue, staff, customer) {
 function getSlice(monthId) {
   const staff = document.getElementById("filter-staff").value;
   const customer = document.getElementById("filter-customer").value;
+  const region = document.getElementById("filter-region").value;
+  const province = document.getElementById("filter-province").value;
   const year = document.getElementById("filter-year").value;
   const monthValue = document.getElementById("filter-month").value;
-  const slice = getSliceRaw(year, monthValue, staff, customer);
-  return enrichSliceWithYoy(slice, year, monthValue, staff, customer);
+  const slice = getSliceRaw(year, monthValue, staff, customer, region, province);
+  return enrichSliceWithYoy(slice, year, monthValue, staff, customer, region, province);
 }
 
 function formatUpdatedSubtitle() {
@@ -700,8 +869,28 @@ function mergeFilterOptions(monthIds) {
   };
 }
 
+function populateProvinceFilter(monthIds) {
+  const provSel = document.getElementById("filter-province");
+  const prev = provSel.value;
+  const provinces = new Set();
+  for (const mid of monthIds) {
+    const b = data.bundles?.[mid];
+    if (!b) continue;
+    (b.provinces || []).forEach((p) => provinces.add(p));
+  }
+  const sorted = [...provinces].sort((a, b) => a.localeCompare(b, "vi"));
+  provSel.innerHTML = `<option value="all">${t("allProvinces")}</option>${sorted
+    .map((p) => `<option value="${p.replace(/"/g, "&quot;")}">${p}</option>`)
+    .join("")}`;
+  if (prev !== "all" && sorted.includes(prev)) provSel.value = prev;
+  else provSel.value = "all";
+}
+
 function populateFilters(monthId) {
   const year = document.getElementById("filter-year").value;
+  const monthValue = document.getElementById("filter-month").value;
+  const monthIds = monthValue === "all" ? getMonthIdsForYear(year) : [monthId || `${year}-${monthValue}`];
+  populateProvinceFilter(monthIds);
   const opts = isAllMonthsSelected()
     ? mergeFilterOptions(getMonthIdsForYear(year))
     : data.meta.filters[monthId];
@@ -772,12 +961,16 @@ function onYearChange() {
   populateMonthFilter(prev);
   document.getElementById("filter-staff").value = "all";
   document.getElementById("filter-customer").value = "all";
+  document.getElementById("filter-region").value = "all";
+  document.getElementById("filter-province").value = "all";
   render();
 }
 
 function onMonthChange() {
   document.getElementById("filter-staff").value = "all";
   document.getElementById("filter-customer").value = "all";
+  document.getElementById("filter-region").value = "all";
+  document.getElementById("filter-province").value = "all";
   render();
 }
 
@@ -841,6 +1034,8 @@ async function init() {
     document.getElementById("filter-month").addEventListener("change", onMonthChange);
     document.getElementById("filter-staff").addEventListener("change", render);
     document.getElementById("filter-customer").addEventListener("change", render);
+    document.getElementById("filter-region").addEventListener("change", render);
+    document.getElementById("filter-province").addEventListener("change", render);
     render();
   } catch (err) {
     setLoading(false);
