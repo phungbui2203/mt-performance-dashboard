@@ -379,6 +379,14 @@ function shortLabel(name, max = 18) {
   return name.length > max ? `${name.slice(0, max - 1)}…` : name;
 }
 
+/** Product line chart: keep text after the last " - " (e.g. MM brand). */
+function categoryChartLabel(name) {
+  if (!name) return "";
+  const parts = String(name).split(" - ");
+  const shortName = parts.length > 1 ? parts[parts.length - 1].trim() : String(name).trim();
+  return shortLabel(shortName, 22);
+}
+
 function milTooltip(context) {
   const raw = context.raw;
   if (raw == null || Number.isNaN(raw)) return `${context.dataset.label}: —`;
@@ -431,7 +439,7 @@ function renderKpis(slice, monthMeta) {
 function renderCategoryChart(slice) {
   if (typeof Chart === "undefined") return;
   const rows = slice.categories.slice(0, 12);
-  const labels = rows.map((r) => shortLabel(r.category, 22));
+  const labels = rows.map((r) => categoryChartLabel(r.category));
 
   const datasets = [
     {
@@ -513,6 +521,7 @@ function renderCategoryChart(slice) {
         },
         tooltip: {
           callbacks: {
+            title: (items) => slice.categories[items[0]?.dataIndex]?.category ?? "",
             label: (ctx) => {
               if (ctx.dataset.type === "line") {
                 return `${ctx.dataset.label}: ${ctx.raw?.toFixed(1) ?? "—"}%`;
@@ -543,12 +552,10 @@ function renderCategoryChart(slice) {
 
 function renderAccountRankingBar(slice) {
   if (typeof Chart === "undefined") return;
-  const rows = slice.accounts.slice(0, 12);
-  const labels = rows.map((r) => shortLabel(r.account, 18)).reverse();
-  const values = rows.map((r) => r.actual / unitDiv()).reverse();
-  const colors = rows
-    .map((r) => (r.achievement >= 0.5 ? "#1A7A4A" : "#C42E2E"))
-    .reverse();
+  const rows = slice.accounts.slice(0, 10);
+  const labels = rows.map((r) => shortLabel(r.account, 18));
+  const values = rows.map((r) => r.actual / unitDiv());
+  const colors = rows.map((r) => (r.achievement >= 0.5 ? "#1A7A4A" : "#C42E2E"));
 
   destroyChart("account-bar");
   charts["account-bar"] = new Chart(document.getElementById("chart-account-bar"), {
@@ -580,8 +587,9 @@ function renderAccountRankingBar(slice) {
         },
         tooltip: {
           callbacks: {
+            title: (items) => rows[items[0]?.dataIndex]?.account ?? "",
             label: (ctx) => {
-              const row = rows[rows.length - 1 - ctx.dataIndex];
+              const row = rows[ctx.dataIndex];
               return [
                 `${t("performance")}: ${fmtMil(row.actual)}`,
                 `${t("target")}: ${fmtMil(row.target)}`,
@@ -598,7 +606,7 @@ function renderAccountRankingBar(slice) {
           title: { display: true, text: t("axisPerfVnd") },
           ticks: { callback: (v) => fmtMil(v * unitDiv()) },
         },
-        y: { ticks: { font: { size: 11 } } },
+        y: { reverse: true, ticks: { font: { size: 11 } } },
       },
     },
   });
