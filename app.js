@@ -72,8 +72,11 @@ function fmtKpiValue(n) {
 function fmtMil(n) {
   if (n == null || Number.isNaN(n)) return "—";
   const v = n / unitDiv();
-  if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(1)}K`;
-  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(v);
+  if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(2)}K`;
+  return new Intl.NumberFormat("vi-VN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(v);
 }
 
 function fmtPct(n) {
