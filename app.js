@@ -63,20 +63,26 @@ function unitDiv() {
   return data?.meta?.unit_divisor || 1_000_000;
 }
 
-function fmtKpiValue(n) {
+function fmtMoney(n) {
   if (n == null || Number.isNaN(n)) return "—";
-  const v = n / unitDiv();
-  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Math.round(v));
-}
-
-function fmtMil(n) {
-  if (n == null || Number.isNaN(n)) return "—";
-  const v = n / unitDiv();
-  if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(2)}K`;
-  return new Intl.NumberFormat("vi-VN", {
+  const bil = n / 1_000_000_000;
+  const mil = n / unitDiv();
+  if (Math.abs(bil) >= 1) {
+    return `${bil.toFixed(2)} ${t("unitBil")}`;
+  }
+  return `${new Intl.NumberFormat("vi-VN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(v);
+  }).format(mil)} ${t("unitMil")}`;
+}
+
+/** @deprecated use fmtMoney */
+function fmtMil(n) {
+  return fmtMoney(n);
+}
+
+function fmtKpiValue(n) {
+  return fmtMoney(n);
 }
 
 function fmtPct(n) {
@@ -390,7 +396,7 @@ function categoryChartLabel(name) {
 function milTooltip(context) {
   const raw = context.raw;
   if (raw == null || Number.isNaN(raw)) return `${context.dataset.label}: —`;
-  return `${context.dataset.label}: ${fmtMil(raw * unitDiv())} ${t("unitMil")}`;
+  return `${context.dataset.label}: ${fmtMoney(raw * unitDiv())}`;
 }
 
 function monthLyAvailable(_monthId, slice) {
@@ -399,7 +405,7 @@ function monthLyAvailable(_monthId, slice) {
 
 function chartValueLabel(value) {
   if (value == null || Number.isNaN(value)) return "";
-  return fmtMil(value * unitDiv());
+  return fmtMoney(value * unitDiv());
 }
 
 function categoryDataLabel(value, ctx) {
@@ -438,7 +444,7 @@ function renderKpis(slice, monthMeta) {
 
 function renderCategoryChart(slice) {
   if (typeof Chart === "undefined") return;
-  const rows = slice.categories.slice(0, 12);
+  const rows = slice.categories.filter((r) => r.actual > 0 || r.target > 0);
   const labels = rows.map((r) => categoryChartLabel(r.category));
 
   const datasets = [
@@ -536,7 +542,7 @@ function renderCategoryChart(slice) {
         y: {
           position: "left",
           title: { display: true, text: t("axisVnd") },
-          ticks: { callback: (v) => fmtMil(v * unitDiv()) },
+          ticks: { callback: (v) => fmtMoney(v * unitDiv()) },
         },
         y1: {
           position: "right",
@@ -604,7 +610,7 @@ function renderAccountRankingBar(slice) {
       scales: {
         x: {
           title: { display: true, text: t("axisPerfVnd") },
-          ticks: { callback: (v) => fmtMil(v * unitDiv()) },
+          ticks: { callback: (v) => fmtMoney(v * unitDiv()) },
         },
         y: { reverse: true, ticks: { font: { size: 11 } } },
       },

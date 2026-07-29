@@ -220,8 +220,8 @@ main {
 .kpi-value.pct-good { color: var(--c-green); }
 .kpi-value.pct-bad { color: var(--c-red); }
 
-.chart-category { min-height: 420px; }
-.chart-category canvas { max-height: 400px; }
+.chart-category { min-height: 520px; }
+.chart-category canvas { max-height: 500px; }
 
 #filter-year { min-width: 100px; }
 #filter-month { min-width: 140px; }
